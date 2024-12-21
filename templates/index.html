@@ -3,17 +3,24 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Balls Gravity Game</title>
+    <title>Balls Game</title>
     <script src="https://cdn.jsdelivr.net/npm/js-cookie@3.0.5/dist/js.cookie.min.js"></script>
     <meta robots="noindex, nofollow">
 </head>
 <body>
     <h1>Score: 0</h1>
     <h2>High Score: 0</h2>
-    <h2 id="worldwide-hs">Worldwide High Score: 0</h2>
     <canvas id="canvas"></canvas>
     <div id="toast-div">
-        <h1 id="toast-text"></h1>
+        <div id="leaderboard-container">
+            <h1>LEADERBOARD</h1>
+            <div id="leaderboard"></div>
+            <div id="submit-score">
+                <input type="text" id="name" placeholder="Enter your name">
+                <button id="score-submit-btn" onclick="submitScore()">Submit Score</button>
+            </div>
+            <button id="play-again-btn" onclick="playAgain()">PLAY AGAIN</button>
+        </div>
     </div>
 </body>
 </html>
@@ -26,6 +33,7 @@
         align-items: center;
         flex-direction: column;
         height: 100vh;
+        font-family: sans-serif;
     }
     canvas {
         border: 2px solid #000;
@@ -33,12 +41,10 @@
         transition: all 500ms;
     }
     h1 {
-        font-family: sans-serif;
         font-size: 2em;
-        margin: 10px;
+        margin: 5px;
     }
     h2 {
-        font-family: sans-serif;
         font-size: 1.5em;
         margin: 10px;
     }
@@ -52,18 +58,51 @@
         justify-content: center;
         align-items: center;
     }
-    #toast-text {
-        font-family: sans-serif;
-        font-size: 4em;
-        transition: all 700ms;
-        user-select: none;
-        opacity: 0;
+    #leaderboard-container {
+        background-color: rgba(0, 0, 0, 0);
+        padding: 10px;
+        border-radius: 10px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
         text-align: center;
-        cursor: default;
+        transition: all 800ms;
+        opacity: 0;
+        backdrop-filter: blur(10px) saturate(70%) brightness(70%);
+    }
+    #leaderboard {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 20px;
+    }
+    .leaderboard-item {
+        border-radius: 5px;
+        padding: 7px;
+        margin: 5px;
+        background-color: rgba(255, 255, 255, 0.1);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        width: 105%;
+    }
+    .leaderboard-rank {
+        font-weight: bold;
+        font-size: 1.3em;
+        border-radius: 2px;
+        padding: 3px;
+        background-color: rgba(255, 255, 255, 0.1);
+    }
+    #play-again-btn {
+        margin-top: 20px;
+        padding: 10px;
+        border-radius: 5px;
+        cursor: pointer;
     }
 </style>
 <script>
     var score = 0;
+    var lastScore = 0;
     var isPaused = false;
     var textColor;
 
@@ -105,6 +144,7 @@
         var distance = Math.sqrt(Math.pow(chaser_ball.x - mouse_pos.x, 2) + Math.pow(chaser_ball.y - mouse_pos.y, 2));
         if(distance < chaser_ball.radius){
             saveHighScore();
+            lastScore = score;
             score = 0;
             document.querySelector('h1').innerText = 'Score: ' + score;
             chaser_ball.x = document.getElementById('canvas').width / 2;
@@ -113,12 +153,9 @@
 
             setTimeout(() => {
                 isPaused = true;
+                renderLeaderboard();
+                document.getElementById('leaderboard-container').style.opacity = 1;
             }, 50);
-
-            setTimeout(function(){
-                isPaused = false;
-                render_frame();
-            }, 1500);
         }
     }
 
@@ -231,7 +268,6 @@
         document.getElementById("canvas").style.borderColor = textColor;
         target_ball.color = textColor;
 
-        getWorldwideHsFromServer();
         loadHighScore();
         send_target_ball_to_new_pos();
         render_frame();
@@ -249,25 +285,60 @@
         if(!high_score || score > high_score){
             Cookies.set('high_score', score);
             document.querySelector('h2').innerText = 'High Score: ' + score;
-            showToastMessage("NEW HIGH SCORE");
         }
-        else{
-            showToastMessage("GAME OVER<br>SCORE: " + score);
-        }
-
-        submitHsToServer();
     }
 
-    function showToastMessage(message){
-        var toast_text = document.getElementById('toast-text');
-        var canvas = document.getElementById('canvas');
-        toast_text.innerHTML = message;
-        toast_text.style.opacity = 1;
-        canvas.style.opacity = 0.2;
-        setTimeout(function(){
-            toast_text.style.opacity = 0;
-            canvas.style.opacity = 1;
-        }, 2000);
+    function renderLeaderboard(){
+        fetch("/get-leaderboard")
+            .then(response => response.json())
+            .then(data => {
+                data = data.slice(0, 5);
+
+                var leaderboard = document.getElementById('leaderboard');
+                leaderboard.innerHTML = '';
+                data.forEach((entry, index) => {
+                    var div = document.createElement('div');
+                    div.classList.add('leaderboard-item');
+
+                    var rank = document.createElement('div');
+                    rank.classList.add('leaderboard-rank');
+                    rank.innerText = (index + 1);
+                    div.appendChild(rank);
+
+                    var text = document.createElement('div');
+                    text.innerText = entry.name + ' - ' + entry.score;
+                    div.appendChild(text);
+
+                    leaderboard.appendChild(div);
+                });
+            });
+    }
+
+    function submitScore(){
+        var name = document.getElementById('name').value;
+        if(name.length == 0) return;
+        if(name.length > 20) {
+            alert('Name must be less than 20 characters');
+            return;
+        }
+        if(lastScore == 0) return;
+
+        fetch("/submit-score?name=" + name + "&score=" + lastScore)
+            .then(response => response.json())
+            .then(data => {
+                renderLeaderboard();
+                document.getElementById('name').value = '';
+                document.getElementById('name').disabled = true;
+                document.getElementById('score-submit-btn').disabled = true;
+            });
+    }
+
+    function playAgain(){
+        isPaused = false;
+        document.getElementById('leaderboard-container').style.opacity = 0;
+        document.getElementById('name').disabled = false;
+        document.getElementById('score-submit-btn').disabled = false;
+        render_frame();
     }
 
     function getRandomColor(hueMin, hueMax, saturationMin, saturationMax, lightnessMin, lightnessMax) {
@@ -285,18 +356,6 @@
         const textColor = getRandomColor(0, 360, 70, 100, 70, 90);
 
         return { backgroundColor, textColor };
-    }
-
-    function getWorldwideHsFromServer(){
-        fetch("/get-high-score").then(response => response.json()).then(data => {
-            document.getElementById("worldwide-hs").innerHTML = 'Worldwide High Score: ' + data.high_score;
-        });
-    }
-
-    function submitHsToServer(){
-        fetch("/set-high-score/" + score).then(response => response.json()).then(data => {
-            console.log(data);
-        });
     }
 
     document.addEventListener('DOMContentLoaded', init);

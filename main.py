@@ -1,34 +1,34 @@
-from flask import Flask, render_template
+from flask import Flask, render_template, request
+import json
 
 app = Flask(__name__)
 
-@app.route("/get-high-score")
-def get_high_score():
-    with open("high_score.txt", "r") as f:
-        high_score = f.read()
-    return {"high_score": high_score}
+def get_leaderboard_from_json():
+    with open("leaderboard.json", "r") as f:
+        unsorted = json.load(f)
+        sorted_leaderboard = sorted(unsorted, key=lambda x: x["score"], reverse=True)
+        return sorted_leaderboard
 
-@app.route("/set-high-score/<int:score>")
-def set_high_score(score):
-    old_high_score = None
-    with open("high_score.txt", "r") as f:
-        old_high_score = f.read()
+def append_score_to_leaderboard(name, score):
+    leaderboard = get_leaderboard_from_json()
+    leaderboard.append({"name": name, "score": score})
+    with open("leaderboard.json", "w") as f:
+        json.dump(leaderboard, f)
 
-    if old_high_score == "" or old_high_score == None:
-        old_high_score = 0
-    
-    if score > int(old_high_score):
-        with open("high_score.txt", "w") as f:
-            f.write(str(score))
-        return {"high_score": score}
-    
-    return {"high_score": old_high_score}
-
-@app.route("/")
+@app.route('/')
 def index():
-    return render_template("index.html")
+    return render_template('index.html')
+
+@app.route('/get-leaderboard')
+def get_leaderboard():
+    return get_leaderboard_from_json()
+
+@app.route('/submit-score')
+def submit_score():
+    name = request.args.get('name')
+    score = int(request.args.get('score'))
+    append_score_to_leaderboard(name, score)
+    return get_leaderboard_from_json()
 
 if __name__ == '__main__':
-    with open("high_score.txt", "a") as f:
-        pass
     app.run(host="0.0.0.0", port=5509)
